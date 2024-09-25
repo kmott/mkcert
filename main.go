@@ -23,6 +23,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/idna"
 )
@@ -68,6 +69,12 @@ const advancedUsage = `Advanced options:
 	-CAROOT
 	    Print the CA certificate and key storage location.
 
+	-cert-expiration-days=825
+	    Set the certificate expiration in days. (Default: 825 days)
+
+	-ca-expiration-days=3650
+	    Set the CA certificate expiration in days. (Default: 10 years)
+
 	$CAROOT (environment variable)
 	    Set the CA certificate and key storage location. (This allows
 	    maintaining multiple local CAs in parallel.)
@@ -91,18 +98,20 @@ func main() {
 	}
 	log.SetFlags(0)
 	var (
-		installFlag   = flag.Bool("install", false, "")
-		uninstallFlag = flag.Bool("uninstall", false, "")
-		pkcs12Flag    = flag.Bool("pkcs12", false, "")
-		ecdsaFlag     = flag.Bool("ecdsa", false, "")
-		clientFlag    = flag.Bool("client", false, "")
-		helpFlag      = flag.Bool("help", false, "")
-		carootFlag    = flag.Bool("CAROOT", false, "")
-		csrFlag       = flag.String("csr", "", "")
-		certFileFlag  = flag.String("cert-file", "", "")
-		keyFileFlag   = flag.String("key-file", "", "")
-		p12FileFlag   = flag.String("p12-file", "", "")
-		versionFlag   = flag.Bool("version", false, "")
+		installFlag            = flag.Bool("install", false, "")
+		uninstallFlag          = flag.Bool("uninstall", false, "")
+		pkcs12Flag             = flag.Bool("pkcs12", false, "")
+		ecdsaFlag              = flag.Bool("ecdsa", false, "")
+		clientFlag             = flag.Bool("client", false, "")
+		helpFlag               = flag.Bool("help", false, "")
+		carootFlag             = flag.Bool("CAROOT", false, "")
+		csrFlag                = flag.String("csr", "", "")
+		certFileFlag           = flag.String("cert-file", "", "")
+		keyFileFlag            = flag.String("key-file", "", "")
+		p12FileFlag            = flag.String("p12-file", "", "")
+		versionFlag            = flag.Bool("version", false, "")
+		certExpirationDaysFlag = flag.Int("cert-expiration-days", 825, "")
+		caExpirationDaysFlag   = flag.Int("ca-expiration-days", 3650, "")
 	)
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), shortUsage)
@@ -142,10 +151,18 @@ func main() {
 	if *csrFlag != "" && flag.NArg() != 0 {
 		log.Fatalln("ERROR: can't specify extra arguments when using -csr")
 	}
+	if *certExpirationDaysFlag < 1 {
+		log.Fatalln("ERROR: -cert-expiration-days must be at least 1")
+	}
+	if *caExpirationDaysFlag < 1 {
+		log.Fatalln("ERROR: -ca-expiration-days must be at least 1")
+	}
 	(&mkcert{
 		installMode: *installFlag, uninstallMode: *uninstallFlag, csrPath: *csrFlag,
 		pkcs12: *pkcs12Flag, ecdsa: *ecdsaFlag, client: *clientFlag,
 		certFile: *certFileFlag, keyFile: *keyFileFlag, p12File: *p12FileFlag,
+		certExpiration: time.Hour * 24 * time.Duration(*certExpirationDaysFlag),
+		caExpiration:   time.Hour * 24 * time.Duration(*caExpirationDaysFlag),
 	}).Run(flag.Args())
 }
 
@@ -157,6 +174,8 @@ type mkcert struct {
 	pkcs12, ecdsa, client      bool
 	keyFile, certFile, p12File string
 	csrPath                    string
+	certExpiration             time.Duration
+	caExpiration               time.Duration
 
 	CAROOT string
 	caCert *x509.Certificate
